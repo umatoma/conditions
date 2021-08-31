@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="umatoma.github.io.conditions">
+    <uses-permission android:name="android.permission.VIBRATE" />
    <application
         android:label="conditions"
         android:icon="@mipmap/ic_launcher">

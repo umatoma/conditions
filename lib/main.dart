@@ -1,113 +1,375 @@
+// ignore_for_file: top_level_function_literal_block
+
+import 'package:conditions/condition.dart';
+import 'package:conditions/repository.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
+
+final dbProvider = FutureProvider(
+  (ref) => openDatabase(),
+);
+
+final conditionRepoProvider = FutureProvider((ref) async {
+  final db = await ref.watch(dbProvider.future);
+  return CondtionRepository(db);
+});
+
+final lastUpdateProvider = StateProvider((ref) {
+  return DateTime.now();
+});
+
+final conditionsProvider = FutureProvider.autoDispose((ref) async {
+  ref.watch(lastUpdateProvider);
+  final repo = await ref.read(conditionRepoProvider.future);
+  return await repo.getList();
+});
+
+final conditionByDateProvider =
+    FutureProvider.family.autoDispose((ref, DateTime date) async {
+  final conditions = await ref.watch(conditionsProvider.future);
+  final condition = conditions.firstWhere(
+    (c) => c.date.isAtSameDayAs(date),
+    orElse: () => Condition.create(date: date),
+  );
+  return condition;
+});
+
+final dialogConditionProvider =
+    StateProvider.family.autoDispose((ref, Condition condition) {
+  return condition;
+});
+
+final focusedDayProvider = StateProvider.autoDispose((ref) {
+  return DateTime.now();
+});
+
+final focusedConditionsProvider = FutureProvider.autoDispose((ref) async {
+  final focusedDay = ref.watch(focusedDayProvider).state;
+  final conditions = await ref.watch(conditionsProvider.future);
+  final focusedConditions = conditions
+      .where((condition) => condition.date.isAtSameMonthAs(focusedDay))
+      .toList();
+  return focusedConditions;
+});
+
+final focusedConditionSummaryProvider = FutureProvider.autoDispose((ref) async {
+  final conditions = await ref.watch(focusedConditionsProvider.future);
+  final summary = ConditionSummary(conditions: conditions);
+  return summary;
+});
 
 void main() {
-  runApp(MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  Intl.defaultLocale = 'ja_JP';
+  runApp(
+    ProviderScope(
+      child: App(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
+class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Conditions',
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: [
+        Locale('ja', 'JP'),
+      ],
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
+        primarySwatch: Colors.teal,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const DashboardScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key? key, required this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      backgroundColor: Colors.white,
+      body: SafeArea(
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
+          children: [
+            const ConditionCalendar(),
+            const SizedBox(height: 16),
+            Expanded(
+              child: const ConditionSummaryView(),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+        onPressed: () async {
+          HapticFeedback.mediumImpact();
+          final now = DateTime.now();
+          final date = DateTime(now.year, now.month, now.day);
+          final condition =
+              await context.read(conditionByDateProvider(date).future);
+          await showDialog(
+            context: context,
+            builder: (context) => ConditionDialog(condition: condition),
+          );
+        },
+        child: Icon(CupertinoIcons.add),
+      ),
     );
+  }
+}
+
+class ConditionCalendar extends StatelessWidget {
+  const ConditionCalendar({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(builder: (context, watch, child) {
+      final asyncConditions = watch(conditionsProvider);
+      return asyncConditions.when(
+        data: (conditions) {
+          return TableCalendar<Condition>(
+            eventLoader: (day) {
+              return conditions
+                  .where((c) => c.date.isAtSameDayAs(day))
+                  .toList();
+            },
+            onDaySelected: (day, focusedDay) async {
+              HapticFeedback.mediumImpact();
+              final condition =
+                  await context.read(conditionByDateProvider(day).future);
+              await showDialog(
+                context: context,
+                builder: (context) => ConditionDialog(condition: condition),
+              );
+            },
+            onPageChanged: (day) {
+              context.read(focusedDayProvider).state = day;
+            },
+            availableCalendarFormats: {
+              CalendarFormat.month: 'month',
+            },
+            firstDay: DateTime.utc(2010, 1, 1),
+            lastDay: DateTime.utc(2099, 1, 1),
+            focusedDay: DateTime.now(),
+            calendarBuilders: CalendarBuilders(
+              markerBuilder: (context, day, events) {
+                return Align(
+                  alignment: Alignment.bottomRight,
+                  child: events.isEmpty
+                      ? Icon(
+                          CupertinoIcons.add,
+                          size: 12,
+                          color: Theme.of(context).unselectedWidgetColor,
+                        )
+                      : Image(
+                          image: valueToIconData(events.first.value),
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.contain,
+                        ),
+                );
+              },
+            ),
+          );
+        },
+        loading: () {
+          return SizedBox(
+            height: 500,
+            width: double.infinity,
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        },
+        error: (error, stackTrace) {
+          return SizedBox(
+            height: 500,
+            width: double.infinity,
+            child: Center(
+              child: Text(error.toString()),
+            ),
+          );
+        },
+      );
+    });
+  }
+}
+
+class ConditionDialog extends StatelessWidget {
+  const ConditionDialog({
+    Key? key,
+    required this.condition,
+  }) : super(key: key);
+
+  final Condition condition;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, watch, child) {
+        final controller = watch(dialogConditionProvider(condition));
+        final state = controller.state;
+        final primaryColor = Theme.of(context).primaryColor;
+        return SimpleDialog(
+          title: Text(
+            DateFormat.yMd().format(state.date),
+          ),
+          children: [
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  for (final value in ConditionValue.values)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: OutlinedButton(
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            controller.state = state.setValue(value);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.all(8),
+                            side: state.value == value
+                                ? BorderSide(color: primaryColor)
+                                : null,
+                          ),
+                          child: Image(
+                            image: valueToIconData(value),
+                            height: 92,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ElevatedButton(
+                onPressed: () async {
+                  HapticFeedback.mediumImpact();
+                  await addCondition(context, state);
+                  Navigator.of(context).pop();
+                },
+                child: Text('登録'),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> addCondition(BuildContext context, Condition state) async {
+    final repo = await context.read(conditionRepoProvider.future);
+    final conditions = await context.read(conditionsProvider.future);
+    final isSaved = conditions
+        .where((condition) => condition.date.isAtSameDayAs(state.date))
+        .isNotEmpty;
+
+    if (isSaved) {
+      await repo.update(state);
+    } else {
+      await repo.insert(state);
+    }
+
+    context.read(lastUpdateProvider).state = DateTime.now();
+  }
+}
+
+class ConditionSummaryView extends StatelessWidget {
+  const ConditionSummaryView({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(builder: (context, watch, child) {
+      final asyncSummary = watch(focusedConditionSummaryProvider);
+      return asyncSummary.when(
+        data: (summary) {
+          return ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('サマリー'),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    for (final value in ConditionValue.values)
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 1 / 1,
+                              child: Image(
+                                image: valueToIconData(value),
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              '${summary.countByValue(value)}',
+                              style: Theme.of(context).textTheme.headline4,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+        loading: () {
+          return Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+        error: (error, stackTrace) {
+          return Center(
+            child: Text(error.toString()),
+          );
+        },
+      );
+    });
+  }
+}
+
+ImageProvider valueToIconData(ConditionValue value) {
+  switch (value) {
+    case ConditionValue.excellent:
+      return AssetImage('images/excellent.png');
+    case ConditionValue.good:
+      return AssetImage('images/good.png');
+    case ConditionValue.poor:
+      return AssetImage('images/poor.png');
+  }
+}
+
+extension ExDateTime on DateTime {
+  bool isAtSameMonthAs(DateTime other) {
+    return year == other.year && month == other.month;
+  }
+
+  bool isAtSameDayAs(DateTime other) {
+    return year == other.year && month == other.month && day == other.day;
   }
 }
